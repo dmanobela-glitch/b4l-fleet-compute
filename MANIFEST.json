@@ -1,0 +1,13 @@
+{
+ "slugs": [
+  "doge-9m-wide"
+ ],
+ "files": 58,
+ "candles": {
+  "doge-9m-wide": "doge_9m_2023-06-01_2026-08-09.csv"
+ },
+ "urls": {
+  "doge-9m-wide": "https://compute.bull4life.com/candles/doge_9m_2023-06-01_2026-08-09.csv"
+ },
+ "built": "2026-09-19T15:05:42Z"
+}
