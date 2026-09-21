@@ -1,0 +1,120 @@
+name: hlev_lane
+
+# THE HLEV BACKTEST LANE on the offload fleet.
+#
+# HLEV is the newest strategy and the only one that had NO fleet lane: replay_build.yml builds WT and
+# sweep replays, hunt_trace.yml hard-refuses any non-WT slug, so HLEV could only ever run on the
+# laptop. Master 2026-09-21 asked for it on the fleet and asked specifically that it run WITHOUT the
+# errors that bite later, so the things that would have bitten are listed here rather than discovered
+# in a log at 3am:
+#
+#  1. DEPS. This runner installs numpy + pandas ONLY, exactly like the other lanes. studies/hlev_v4.py
+#     used to carry a bare module-level `from numba import njit`, which made `import hlev_v4` a hard
+#     ImportError here — the whole lane would have died at import, before a single bar. It is now
+#     guarded the same way hlev_ladder.py already guarded it, so a missing numba costs speed and never
+#     correctness. numba is installed below anyway; the guard is what makes its absence survivable.
+#  2. NO SKLEARN, ON PURPOSE. studies/out/hlev_frozen_v1.pkl holds LIVE sklearn objects, so loading it
+#     imports sklearn and fails here as `ImportError: sklearn.preprocessing._data` raised from inside
+#     pickle.load — which reads like a corrupt model rather than a missing package. The pickle is NOT
+#     shipped. hlev_backtest.py reads compute/live_port/hlev_filter_params.json instead: the same
+#     filter baked to plain arrays, the same artifact the LIVE executor uses, verified equal to the
+#     pickle at 0.000e+00 max probability difference and 0 decision disagreements over 20,000 samples.
+#     So the backtest and live now share one filter instead of two that can drift.
+#  3. CANDLES ARE NEVER IN THE KIT. Same rule as every other lane — the coordinator serves them and
+#     the runner pulls the one file it needs.
+#
+# PARITY IS ASSERTED, NOT ASSUMED: the laptop and a bare-runner simulation produced byte-identical
+# rows for ada_3m (18 rows, 0 field differences, 0 warnings) before this workflow was written.
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:        { description: "HLEV slot, e.g. ada_3m", required: true }
+      candle:      { description: "candle filename the runner must use", required: true }
+      candle_url:  { description: "absolute URL to fetch that candle from", required: true }
+      kit_ref:     { description: "exact kit commit this run is pinned to", required: false, default: kit }
+
+permissions:
+  contents: read
+
+jobs:
+  hlev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.kit_ref }}
+
+      - name: Decrypt kit
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$KIT_KEY" || { echo "::error::B4L_KIT_KEY not set"; exit 1; }
+          mkdir -p engine
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass "pass:$KIT_KEY"
+          tar -xf kit.tar -C engine
+          rm -f kit.tar kit.enc
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      # numba is a SPEED dependency here, not a correctness one (see note 1). If this step ever breaks
+      # the lane must still run, so it is allowed to fail.
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          pip install --quiet numpy pandas
+          pip install --quiet numba || echo "numba unavailable - falling back to the pure-python njit shim"
+
+      - name: Assert the lane's dependency contract
+        working-directory: engine
+        run: |
+          set -euo pipefail
+          test -f compute/live_port/hlev_filter_params.json || {
+            echo "::error::pure-numpy filter params missing - hlev_backtest would fall back to the sklearn pickle"; exit 1; }
+          test -f studies/out/hlev_frozen_v1.json || { echo "::error::frozen HLEV spec missing"; exit 1; }
+          test -f tools/fan_series.py || { echo "::error::fan_series missing - prep() fails at the first bar"; exit 1; }
+          if [ -f studies/out/hlev_frozen_v1.pkl ]; then
+            echo "::error::the sklearn pickle was shipped - it must not be, it drags sklearn onto the runner"; exit 1; fi
+          python - <<'PY'
+          import importlib, sys
+          # sklearn must be ABSENT. If a future dep pulls it in, the lane would silently start using the
+          # pickle path again and the no-sklearn guarantee would rot without anyone noticing.
+          try:
+              importlib.import_module('sklearn'); print('::warning::sklearn is present - the lane no longer proves the pure-numpy path')
+          except ImportError:
+              print('sklearn absent, as intended')
+          PY
+
+      - name: Fetch candle
+        run: |
+          set -euo pipefail
+          mkdir -p engine/candles
+          curl -sSfL --retry 3 --retry-delay 5 "${{ inputs.candle_url }}" -o "engine/candles/${{ inputs.candle }}"
+          ls -l "engine/candles/${{ inputs.candle }}"
+
+      - name: HLEV backtest
+        working-directory: engine
+        run: |
+          set -euo pipefail
+          mkdir -p studies/out
+          python -u studies/hlev_backtest.py --slot "${{ inputs.slot }}" \
+            --out "studies/out/hlev_backtest_${{ inputs.slot }}.csv" 2>&1 | tee hlev.log
+          # An empty result is a FAILURE, not a quiet success. A lane that writes a header-only CSV and
+          # exits 0 is the exact shape of a check that reports health while measuring nothing.
+          ROWS=$(( $(wc -l < "studies/out/hlev_backtest_${{ inputs.slot }}.csv") - 1 ))
+          echo "rows=$ROWS"
+          [ "$ROWS" -gt 0 ] || { echo "::error::HLEV produced 0 rows for ${{ inputs.slot }}"; exit 1; }
+          # The pure-numpy path must be the one that ran.
+          if grep -q "falling back to the sklearn pickle" hlev.log; then
+            echo "::error::fell back to the sklearn pickle - the pure-numpy params were not found"; exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hlev-${{ inputs.slot }}
+          path: |
+            engine/studies/out/hlev_backtest_${{ inputs.slot }}.csv
+            engine/hlev.log
+          if-no-files-found: error
