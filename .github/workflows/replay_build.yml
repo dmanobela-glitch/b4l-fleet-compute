@@ -19,6 +19,10 @@ on:
         description: "exact kit commit sha this run is pinned to (branch `kit` is force-pushed per job)"
         required: false
         default: kit
+      extra_env:
+        description: "EXPERIMENT ONLY: JSON {K: V} exported before the build (e.g. roadmap sizing). Default {} = unchanged."
+        required: false
+        default: "{}"
 
 permissions:
   contents: read
@@ -89,6 +93,29 @@ jobs:
           # The runner holds EXACTLY ONE candle: the one the diamond's pin names. That is deliberate -
           # the engine falls back to the newest matching file on an exact miss, so a second file here
           # could silently change the backtest window.
+
+      # EXPERIMENT ENV (2026-09-22). Empty by default, so every existing dispatch is unchanged. When set,
+      # each key is exported for the build AND B4L_EXTRA_REGIME names them, so compute/fleet_regime stamps
+      # them onto the rows — an experiment must never come back indistinguishable from its control
+      # (measured 2026-09-21: an unlabelled --extra-env hunt returned 798 rows stamped exactly like one).
+      # fleet_regime.applied() only rewrites its REGIME_KEYS allowlist, so these pass through to the engine.
+      - name: Apply experiment env
+        env:
+          EXTRA_ENV_JSON: ${{ inputs.extra_env }}
+        run: |
+          set -euo pipefail
+          python - <<'PYX' >> "$GITHUB_ENV"
+          import json, os, re
+          d = json.loads(os.environ.get('EXTRA_ENV_JSON') or '{}')
+          keys = []
+          for k, v in d.items():
+              if not re.fullmatch(r'B4L_[A-Z0-9_]+', k):
+                  raise SystemExit('refusing non-B4L experiment key: %r' % k)
+              print('%s=%s' % (k, v)); keys.append(k)
+          if keys:
+              print('B4L_EXTRA_REGIME=' + ','.join(sorted(keys)))
+          PYX
+          grep -E '^B4L_' "$GITHUB_ENV" || echo "no experiment env (control run)"
 
       - name: Build bundle
         working-directory: engine
