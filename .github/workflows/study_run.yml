@@ -89,13 +89,18 @@ jobs:
         run: pip install --quiet numpy pandas matplotlib scipy
 
       - name: Fetch candles
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           mkdir -p engine/candles
           python3 - <<'PY'
-          import json, subprocess
+          import json, os, subprocess
           m = json.load(open('MANIFEST.json'))
           urls = dict(m.get('study_candles') or {})
+          if m.get('shard_candles'):               # per-shard lists given: this runner pulls ONLY its own candles
+              own = set(m['shard_candles'].get(os.environ.get('SHARD', '')) or [])
+              urls = {k: v for k, v in urls.items() if k in own}
           for s, c in (m.get('candles') or {}).items():
               if c and (m.get('urls') or {}).get(s):
                   urls[c] = m['urls'][s]
