@@ -28,6 +28,11 @@ on:
       # Empty = the old behaviour, unchanged. B4L_STUB_1M itself travels in the regime (stamped on every row).
       stub_candle:     { description: "optional 1m candle filename for the signal stub", required: false, default: "" }
       stub_candle_url: { description: "absolute URL to fetch that 1m candle from", required: false, default: "" }
+      # 2026-10-01 (__B4L_FILL_OHLC__ for hunts): a world with a fill venue (allsides_xlot_funding_bybit) needs the
+      # venue's bars on the runner. Without them every backtest raised FileNotFoundError and the run still went green
+      # (disc3m_honest2 09-29, wtlen_joint 10-01). B4L_FILL_OHLC itself travels in the regime. Empty = unchanged.
+      fill_candle:     { description: "optional fill-venue candle filename (B4L_FILL_OHLC)", required: false, default: "" }
+      fill_candle_url: { description: "absolute URL to fetch that fill candle from", required: false, default: "" }
 
 permissions:
   contents: read
@@ -56,7 +61,7 @@ jobs:
         with: { python-version: '3.11' }
 
       - name: Install deps
-        run: pip install --quiet numpy pandas
+        run: pip install --quiet numpy pandas ccxt   # ccxt: engine warm-up (_bt_head_check.py) needs it to fetch on a candle CACHE MISS; without it the job sys.exit's "ERROR: pip install ccxt" 16s in (SB1 blocker 2026-09-30)
 
       - name: Fetch pinned candle
         run: |
@@ -71,6 +76,13 @@ jobs:
           set -euo pipefail
           curl -sSfL --retry 3 --retry-delay 5 "${{ inputs.stub_candle_url }}" -o "engine/candles/${{ inputs.stub_candle }}"
           ls -l "engine/candles/${{ inputs.stub_candle }}"
+
+      - name: Fetch the fill-venue candle
+        if: ${{ inputs.fill_candle != '' }}
+        run: |
+          set -euo pipefail
+          curl -sSfL --retry 3 --retry-delay 5 "${{ inputs.fill_candle_url }}" -o "engine/candles/${{ inputs.fill_candle }}"
+          ls -l "engine/candles/${{ inputs.fill_candle }}"
 
       - name: Seed the hunt from the shipped hof
         working-directory: engine
@@ -200,3 +212,23 @@ jobs:
           name: hunt-${{ inputs.variant }}
           path: out/
           retention-days: 14
+
+      # __B4L_HUNT_DEGENERATE_GATE__ (2026-10-01; studies/hunt_harvest_guard.py's rule, inlined so it needs nothing from
+      # the kit): a hunt in which NO individual ever scored above the invalid sentinel (-1e8) found nothing; its hof holds
+      # only the banked seeds. That run must go RED, never green (disc3m_honest2 09-29 and wtlen_joint 10-01 went green
+      # with every backtest raising). Runs after the upload so the failed hunt's files stay readable.
+      - name: Gate - the hunt evaluated something
+        run: |
+          python - <<'PY'
+          import csv, sys
+          s = []
+          for r in csv.DictReader(open('out/hunter_trace.csv', newline='')):
+              try:
+                  s.append(float(r['score']))
+              except (KeyError, TypeError, ValueError):
+                  pass
+          ok = sum(1 for v in s if v > -1e8)
+          print('trace scores: %d, valid %d, best %s' % (len(s), ok, max(s) if s else None))
+          if not ok:
+              sys.exit('::error::DEGENERATE hunt: no individual evaluated (see hunt_tail.log)')
+          PY
