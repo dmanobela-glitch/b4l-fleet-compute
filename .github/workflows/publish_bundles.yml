@@ -11,7 +11,7 @@ name: publish_bundles
 # It rebuilds rather than scraping old artifacts: artifacts expire (7 days), belong to specific runs, and
 # a half-expired set would publish a partial site silently. A rebuild is free here and always complete.
 #
-#   gh workflow run publish_bundles.yml -R Bull4Life/b4l-fleet-compute -f slugs=a,b,c
+#   gh workflow run publish_bundles.yml -R dmanobela-glitch/b4l-fleet-compute -f slugs=a,b,c
 # then the box:
 #   curl -sSfL -o bundles.tgz https://github.com/<repo>/releases/download/bundles/marketing_bundles.tgz
 #   tar xzf bundles.tgz -C web/public/marketing
