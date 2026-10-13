@@ -1,0 +1,23 @@
+{
+ "slugs": [],
+ "files": 82,
+ "candles": {},
+ "urls": {},
+ "study_candles": {
+  "ada_3m_2023-06-01_2026-10-11.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ada_3m_2023-06-01_2026-10-11.csv",
+  "doge_3m_2023-06-01_2026-10-11.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/doge_3m_2023-06-01_2026-10-11.csv",
+  "ena_3m_2023-06-01_2026-10-11.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ena_3m_2023-06-01_2026-10-11.csv",
+  "near_3m_2023-06-01_2026-10-11.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/near_3m_2023-06-01_2026-10-11.csv",
+  "xrp_3m_2023-06-01_2026-10-11.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/xrp_3m_2023-06-01_2026-10-11.csv"
+ },
+ "shard_candles": {
+  "pool": [
+   "ada_3m_2023-06-01_2026-10-11.csv",
+   "doge_3m_2023-06-01_2026-10-11.csv",
+   "ena_3m_2023-06-01_2026-10-11.csv",
+   "near_3m_2023-06-01_2026-10-11.csv",
+   "xrp_3m_2023-06-01_2026-10-11.csv"
+  ]
+ },
+ "built": "2026-10-13T04:20:17Z"
+}
