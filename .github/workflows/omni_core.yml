@@ -27,6 +27,10 @@ on:
         description: "test shards, 1 to 16"
         required: false
         default: "8"
+      oses:
+        description: 'which images build: a JSON list of ubuntu-latest and windows-latest'
+        required: false
+        default: '["ubuntu-latest", "windows-latest"]'
 
 permissions:
   contents: read
@@ -60,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJson(inputs.oses) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     defaults:
