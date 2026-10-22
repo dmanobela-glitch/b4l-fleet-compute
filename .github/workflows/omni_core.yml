@@ -1,0 +1,221 @@
+name: omni_core
+
+# BOT-23 S9 and its test matrix (site, 2026-10-22). The bot's core is built on windows-latest and ubuntu-latest, and its
+# tests run in N shards, from ONE encrypted kit, the same model as study_run.yml: the laptop pushes kit.enc (AES-256-CBC,
+# PBKDF2 200,000, key = the repo secret B4L_KIT_KEY) to the branch kit-omni and dispatches this workflow pinned to that
+# exact commit.
+#
+# PRIVACY, because this repo is PUBLIC and the bot's code is private:
+#   * the source, the tests and every command travel INSIDE kit.enc (RECIPE.json, TESTS.json, ci/), never in an input;
+#   * every word of the build, pip, pytest and the replay goes into an ENCRYPTED artifact (same key); the public log
+#     shows a job's name, one count line and an exit code;
+#   * the plain binaries never leave a runner: only core-<os>.enc, and the sha256 lines of the binaries (a hash says
+#     nothing of the code);
+#   * no key, token or account id is on a runner except the kit key; the tests use the fake venue only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kit_ref:
+        description: "exact kit commit sha this run is pinned to"
+        required: true
+      what:
+        description: "build | tests | both"
+        required: false
+        default: "build"
+      shards:
+        description: "test shards, 1 to 16"
+        required: false
+        default: "8"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.p.outputs.build }}
+      tests: ${{ steps.p.outputs.tests }}
+      matrix: ${{ steps.p.outputs.matrix }}
+    steps:
+      - id: p
+        env:
+          WHAT: ${{ inputs.what }}
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          what = os.environ.get("WHAT") or "build"
+          s = os.environ.get("SHARDS") or "8"
+          n = max(1, min(16, int(s))) if s.isdigit() else 8
+          print("build=" + ("true" if what in ("build", "both") else "false"))
+          print("tests=" + ("true" if what in ("tests", "both") else "false"))
+          print("matrix=" + json.dumps({"shard": [str(i) for i in range(n)], "of": [str(n)]}))
+          PY
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.kit_ref }}
+      - name: Decrypt kit
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$KIT_KEY" || { echo "::error::B4L_KIT_KEY not set on this repo"; exit 1; }
+          mkdir -p src
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass env:KIT_KEY
+          tar -xf kit.tar -C src
+          rm -f kit.tar kit.enc
+          test -f src/RECIPE.json || { echo "::error::the kit carries no RECIPE.json"; exit 1; }
+          echo "kit files: $(find src -type f | wc -l)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y -qq patchelf > /dev/null
+      - name: Build
+        id: b
+        run: |
+          set -uo pipefail
+          cd src
+          python ci/build.py ../out ../dist && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat ../out/sha256.txt >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Seal
+        if: always()
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+          OSN: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          mkdir -p out dist sealed
+          cp out/sha256.txt "sealed/sha256-$OSN.txt" 2>/dev/null || : > "sealed/sha256-$OSN.txt"
+          tar -cf seal.tar out dist
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in seal.tar -out "sealed/core-$OSN.enc" -pass env:KIT_KEY
+          rm -rf seal.tar out dist src
+          ls -l sealed | tail -n +2 | awk '{print $5, $9}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-${{ runner.os }}
+          path: sealed/
+          retention-days: 3
+      - name: Result
+        run: exit ${{ steps.b.outputs.code || 1 }}
+
+  tests:
+    needs: plan
+    if: needs.plan.outputs.tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.kit_ref }}
+      - name: Decrypt kit
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$KIT_KEY" || { echo "::error::B4L_KIT_KEY not set on this repo"; exit 1; }
+          mkdir -p src
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass env:KIT_KEY
+          tar -xf kit.tar -C src
+          rm -f kit.tar kit.enc
+          test -f src/TESTS.json || { echo "::error::the kit carries no TESTS.json"; exit 1; }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Shard
+        id: t
+        env:
+          SHARD: ${{ matrix.shard }}
+          OF: ${{ matrix.of }}
+        run: |
+          set -uo pipefail
+          cd src
+          python ci/run_shard.py tests "$SHARD" "$OF" ../out && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=$?" >> "$GITHUB_OUTPUT"
+      - name: Seal
+        if: always()
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          mkdir -p out sealed
+          tar -cf seal.tar out
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in seal.tar -out "sealed/tests-$SHARD.enc" -pass env:KIT_KEY
+          rm -rf seal.tar out src
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-${{ matrix.shard }}
+          path: sealed/
+          retention-days: 3
+      - name: Result
+        run: exit ${{ steps.t.outputs.code || 1 }}
+
+  golden:
+    needs: plan
+    if: needs.plan.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.kit_ref }}
+      - name: Decrypt kit
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$KIT_KEY" || { echo "::error::B4L_KIT_KEY not set on this repo"; exit 1; }
+          mkdir -p src
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass env:KIT_KEY
+          tar -xf kit.tar -C src
+          rm -f kit.tar kit.enc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Golden replay
+        id: g
+        run: |
+          set -uo pipefail
+          cd src
+          python -m pip install --quiet --disable-pip-version-check -r requirements-test.txt > /dev/null 2>&1 || true
+          python ci/run_shard.py golden ../out && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=$?" >> "$GITHUB_OUTPUT"
+      - name: Seal
+        if: always()
+        env:
+          KIT_KEY: ${{ secrets.B4L_KIT_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p out sealed
+          tar -cf seal.tar out
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in seal.tar -out sealed/golden.enc -pass env:KIT_KEY
+          rm -rf seal.tar out src
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden
+          path: sealed/
+          retention-days: 3
+      - name: Result
+        run: exit ${{ steps.g.outputs.code || 1 }}
