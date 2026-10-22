@@ -80,7 +80,7 @@ jobs:
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass env:KIT_KEY
           tar -xf kit.tar -C src
           rm -f kit.tar kit.enc
-          test -f src/RECIPE.json || { echo "::error::the kit carries no RECIPE.json"; exit 1; }
+          test -n "$(find src -name RECIPE.json -print -quit)" || { echo "::error::the kit carries no RECIPE.json"; exit 1; }
           echo "kit files: $(find src -type f | wc -l)"
       - uses: actions/setup-python@v5
         with:
@@ -139,7 +139,7 @@ jobs:
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kit.enc -out kit.tar -pass env:KIT_KEY
           tar -xf kit.tar -C src
           rm -f kit.tar kit.enc
-          test -f src/TESTS.json || { echo "::error::the kit carries no TESTS.json"; exit 1; }
+          test -n "$(find src -name TESTS.json -print -quit)" || { echo "::error::the kit carries no TESTS.json"; exit 1; }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -199,8 +199,7 @@ jobs:
         run: |
           set -uo pipefail
           cd src
-          python -m pip install --quiet --disable-pip-version-check -r requirements-test.txt > /dev/null 2>&1 || true
-          python ci/run_shard.py golden ../out && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=$?" >> "$GITHUB_OUTPUT"
+                    python ci/run_shard.py golden ../out && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=$?" >> "$GITHUB_OUTPUT"
       - name: Seal
         if: always()
         env:
