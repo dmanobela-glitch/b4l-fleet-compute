@@ -108,6 +108,8 @@ jobs:
           set -euo pipefail
           mkdir -p out dist sealed
           cp out/sha256.txt "sealed/sha256-$OSN.txt" 2>/dev/null || : > "sealed/sha256-$OSN.txt"
+          # the build is packed HERE, on its own system, so file modes (the exe's run bit) travel inside it (the bot, 10-22)
+          tar -czf out/core-dist.tgz -C dist .
           tar -cf seal.tar out dist
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in seal.tar -out "sealed/core-$OSN.enc" -pass env:KIT_KEY
           rm -rf seal.tar out dist src
