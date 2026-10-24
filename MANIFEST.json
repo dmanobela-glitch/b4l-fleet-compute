@@ -1,0 +1,24 @@
+{
+ "slugs": [],
+ "files": 110,
+ "candles": {},
+ "urls": {},
+ "study_candles": {
+  "ada_26m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/ada_26m_2023-06-01_2026-10-23.csv",
+  "ada_3m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/ada_3m_2023-06-01_2026-10-23.csv",
+  "ada_6m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/ada_6m_2023-06-01_2026-10-23.csv",
+  "btc_3m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/btc_3m_2023-06-01_2026-10-23.csv",
+  "btc_6m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/btc_6m_2023-06-01_2026-10-23.csv",
+  "doge_3m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/doge_3m_2023-06-01_2026-10-23.csv",
+  "doge_6m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/doge_6m_2023-06-01_2026-10-23.csv",
+  "ena_3m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/ena_3m_2023-06-01_2026-10-23.csv",
+  "ena_9m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/ena_9m_2023-06-01_2026-10-23.csv",
+  "near_6m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/near_6m_2023-06-01_2026-10-23.csv",
+  "near_9m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/near_9m_2023-06-01_2026-10-23.csv",
+  "xmr_26m_2023-06-01_2026-08-06.csv": "https://compute.bull4life.com/candles/xmr_26m_2023-06-01_2026-08-06.csv",
+  "xmr_6m_2023-06-01_2026-08-06.csv": "https://compute.bull4life.com/candles/xmr_6m_2023-06-01_2026-08-06.csv",
+  "xrp_9m_2023-06-01_2026-10-23.csv": "https://compute.bull4life.com/candles/xrp_9m_2023-06-01_2026-10-23.csv"
+ },
+ "shard_candles": {},
+ "built": "2026-10-24T22:08:24Z"
+}
