@@ -1,0 +1,14 @@
+{
+ "slugs": [],
+ "files": 108,
+ "candles": {},
+ "urls": {},
+ "study_candles": {
+  "ada_1m_2023-06-01_2026-10-25.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ada_1m_2023-06-01_2026-10-25.csv",
+  "ada_1m_bybit_2023-06-01_2026-10-25.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ada_1m_bybit_2023-06-01_2026-10-25.csv",
+  "ada_6m_2023-06-01_2026-10-25.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ada_6m_2023-06-01_2026-10-25.csv",
+  "ada_6m_bybit_2023-06-01_2026-10-25.csv": "https://github.com/dmanobela-glitch/b4l-fleet-compute/releases/download/candles/ada_6m_bybit_2023-06-01_2026-10-25.csv"
+ },
+ "shard_candles": {},
+ "built": "2026-11-07T18:54:53Z"
+}
